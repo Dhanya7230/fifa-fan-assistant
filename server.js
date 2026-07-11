@@ -5,16 +5,20 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = 3000;
 
-// Allow our frontend page to talk to this server
+// Security headers + CORS
 app.use(helmet());
 app.use(cors());
+// Allow the server to understand JSON sent from the frontend
+app.use(express.json());
+// Serve our frontend files (HTML/CSS/JS) from a folder called "public"
+app.use(express.static('public'));
 
 // Rate limiting: max 30 requests per minute per IP address, to prevent abuse
 // and protect against runaway AI API costs.
@@ -23,22 +27,9 @@ const askLimiter = rateLimit({
   max: 30,
   message: { error: 'Too many requests. Please wait a moment and try again.' },
 });
-// Allow the server to understand JSON sent from the frontend
-app.use(express.json());
-// Serve our frontend files (HTML/CSS/JS) from a folder called "public"
-app.use(express.static('public'));
 
 // Connect to Google's Gemini AI using the secret key from .env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// --- Simple in-memory cache ---
-// Avoids calling the AI again for identical recent questions, saving time and API cost.
-// Cache entries expire after 60 seconds since crowd data changes over time.
-const responseCache = new Map();
-const CACHE_TTL_MS = 60 * 1000;
-
-function getCacheKey(question, language, role, topic) {
-  return `${question.trim().toLowerCase()}|${language}|${role}|${topic}`;
-}
 
 // --- Simulated live crowd data ---
 // In a real deployment, this would come from turnstile sensors, CCTV analytics,
@@ -51,10 +42,8 @@ const gates = {
   'Gate D (West, Accessible)': 20,
 };
 
-// Every 10 seconds, nudge crowd levels up/down a little to simulate real activity
 // Every 10 seconds, nudge crowd levels up/down a little to simulate real activity.
-// Only run this when the server actually starts (not during automated tests),
-// and keep a reference so it can be cleanly stopped if needed.
+// Only run this when the server actually starts (not during automated tests).
 let crowdInterval;
 if (require.main === module) {
   crowdInterval = setInterval(() => {
@@ -71,17 +60,42 @@ function getCrowdSummary() {
     .join(', ');
 }
 
+// --- Simple in-memory cache ---
+// Avoids calling the AI again for identical recent questions, saving time and API cost.
+// Cache entries expire after 60 seconds since crowd data changes over time.
+const responseCache = new Map();
+const CACHE_TTL_MS = 60 * 1000;
+
+function getCacheKey(question, language, role, topic) {
+  return `${question.trim().toLowerCase()}|${language}|${role}|${topic}`;
+}
+
+// Allow-lists: only known, expected values are trusted from client input.
+// This defends against unexpected or malicious values being injected into the AI prompt.
+const ALLOWED_ROLES = ['Fan', 'Volunteer', 'Venue Staff', 'Person with a disability or mobility need'];
+const ALLOWED_TOPICS = ['General', 'Navigation', 'Accessibility', 'Transportation', 'Crowd/Safety', 'Sustainability'];
+const ALLOWED_LANGUAGES = ['English', 'Spanish', 'French', 'Portuguese', 'Arabic', 'Hindi'];
+
 // This is the main endpoint: the frontend sends a question here, we send back an AI answer
 app.post('/api/ask', askLimiter, async (req, res) => {
   try {
     const { question, language, role, topic } = req.body;
 
-    if (!question || question.trim() === '') {
+    if (!question || typeof question !== 'string' || question.trim() === '') {
       return res.status(400).json({ error: 'Please type a question.' });
     }
 
+    if (question.length > 500) {
+      return res.status(400).json({ error: 'Question is too long. Please limit it to 500 characters.' });
+    }
+
+    // Fall back to safe defaults if the client sends anything unexpected
+    const safeRole = ALLOWED_ROLES.includes(role) ? role : 'Fan';
+    const safeTopic = ALLOWED_TOPICS.includes(topic) ? topic : 'General';
+    const safeLanguage = ALLOWED_LANGUAGES.includes(language) ? language : 'English';
+
     // --- Efficiency: check cache before calling the AI ---
-    const cacheKey = getCacheKey(question, language, role, topic);
+    const cacheKey = getCacheKey(question, safeLanguage, safeRole, safeTopic);
     const cached = responseCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
       return res.json({ answer: cached.answer, cached: true });
@@ -98,30 +112,30 @@ app.post('/api/ask', askLimiter, async (req, res) => {
     // extra instructions to the AI so the answer actually fits their situation.
     let extraGuidance = '';
 
-    if (role === 'Person with a disability or mobility need') {
+    if (safeRole === 'Person with a disability or mobility need') {
       extraGuidance += ' Prioritize step-free routes, elevators, ramps, and accessible seating/entrances in your answer. Be extra specific about distances and physical layout.';
     }
-    if (role === 'Volunteer') {
+    if (safeRole === 'Volunteer') {
       extraGuidance += ' Answer as if briefing a volunteer who needs to relay this information to fans — be precise and use short, actionable phrasing.';
     }
-    if (role === 'Venue Staff') {
+    if (safeRole === 'Venue Staff') {
       extraGuidance += ' Answer as if briefing operational staff — include any relevant protocol, safety, or coordination details.';
     }
 
-    if (topic === 'Crowd/Safety') {
+    if (safeTopic === 'Crowd/Safety') {
       extraGuidance += ' Treat this as potentially urgent — prioritize clear, calm, immediate safety guidance first.';
     }
-    if (topic === 'Sustainability') {
+    if (safeTopic === 'Sustainability') {
       extraGuidance += ' Highlight eco-friendly options (recycling points, public transport, reusable items) where relevant.';
     }
-    if (topic === 'Transportation') {
+    if (safeTopic === 'Transportation') {
       extraGuidance += ' Focus on shuttle, metro, rideshare, and parking guidance.';
     }
 
     const prompt = `You are a helpful FIFA World Cup 2026 stadium assistant.
-The person asking is a: ${role}.
-Their question topic category is: ${topic}.
-Respond in this language: ${language}.
+The person asking is a: ${safeRole}.
+Their question topic category is: ${safeTopic}.
+Respond in this language: ${safeLanguage}.
 Current live gate crowd levels: ${crowdSummary}.
 When relevant (navigation, crowd/safety, or accessibility questions), use this live data to recommend the least crowded suitable gate or route, and mention the current crowd level.
 ${extraGuidance}
@@ -129,7 +143,7 @@ Keep answers short, clear, and practical (max ~4 sentences unless the question n
 
 Their question: ${question}`;
 
-   const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt);
     const answer = result.response.text();
 
     // Store this answer in the cache for future identical questions
