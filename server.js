@@ -20,6 +20,31 @@ app.use(express.static('public'));
 // Connect to Google's Gemini AI using the secret key from .env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// --- Simulated live crowd data ---
+// In a real deployment, this would come from turnstile sensors, CCTV analytics,
+// or a stadium IoT system. For this hackathon, we simulate realistic live data
+// that changes slightly over time, so the assistant can reason about it.
+const gates = {
+  'Gate A (North)': 30,
+  'Gate B (East)': 45,
+  'Gate C (South)': 80,
+  'Gate D (West, Accessible)': 20,
+};
+
+// Every 10 seconds, nudge crowd levels up/down a little to simulate real activity
+setInterval(() => {
+  for (const gate in gates) {
+    const change = Math.floor(Math.random() * 21) - 10; // -10 to +10
+    gates[gate] = Math.max(0, Math.min(100, gates[gate] + change));
+  }
+}, 10000);
+
+function getCrowdSummary() {
+  return Object.entries(gates)
+    .map(([name, level]) => `${name}: ${level}% capacity`)
+    .join(', ');
+}
+
 // This is the main endpoint: the frontend sends a question here, we send back an AI answer
 app.post('/api/ask', async (req, res) => {
   try {
@@ -29,7 +54,11 @@ app.post('/api/ask', async (req, res) => {
       return res.status(400).json({ error: 'Please type a question.' });
     }
 
+    // Create the AI model instance
     const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+
+    // Get the current (simulated) live crowd data
+    const crowdSummary = getCrowdSummary();
 
     // --- Logical decision making based on user context ---
     // Depending on who is asking and what topic they picked, we add
@@ -60,6 +89,8 @@ app.post('/api/ask', async (req, res) => {
 The person asking is a: ${role}.
 Their question topic category is: ${topic}.
 Respond in this language: ${language}.
+Current live gate crowd levels: ${crowdSummary}.
+When relevant (navigation, crowd/safety, or accessibility questions), use this live data to recommend the least crowded suitable gate or route, and mention the current crowd level.
 ${extraGuidance}
 Keep answers short, clear, and practical (max ~4 sentences unless the question needs a list).
 
