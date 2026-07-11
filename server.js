@@ -32,12 +32,18 @@ const gates = {
 };
 
 // Every 10 seconds, nudge crowd levels up/down a little to simulate real activity
-setInterval(() => {
-  for (const gate in gates) {
-    const change = Math.floor(Math.random() * 21) - 10; // -10 to +10
-    gates[gate] = Math.max(0, Math.min(100, gates[gate] + change));
-  }
-}, 10000);
+// Every 10 seconds, nudge crowd levels up/down a little to simulate real activity.
+// Only run this when the server actually starts (not during automated tests),
+// and keep a reference so it can be cleanly stopped if needed.
+let crowdInterval;
+if (require.main === module) {
+  crowdInterval = setInterval(() => {
+    for (const gate in gates) {
+      const change = Math.floor(Math.random() * 21) - 10; // -10 to +10
+      gates[gate] = Math.max(0, Math.min(100, gates[gate] + change));
+    }
+  }, 10000);
+}
 
 function getCrowdSummary() {
   return Object.entries(gates)
@@ -106,6 +112,11 @@ Their question: ${question}`;
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ FIFA Fan Assistant server running at http://localhost:${PORT}`);
-});
+// Only start the server if this file is run directly (not when imported by tests)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ FIFA Fan Assistant server running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
