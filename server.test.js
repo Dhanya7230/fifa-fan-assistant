@@ -6,6 +6,32 @@ const request = require('supertest');
 const app = require('./server');
 
 describe('FIFA Fan Assistant API', () => {
+    // Test: Rejects overly long questions (protects against abuse/oversized payloads)
+  test('POST /api/ask returns 400 when question exceeds 500 characters', async () => {
+    const longQuestion = 'a'.repeat(501);
+    const response = await request(app)
+      .post('/api/ask')
+      .send({ question: longQuestion, language: 'English', role: 'Fan', topic: 'General' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('error');
+  });
+
+  // Test: Falls back to safe defaults when unexpected role/topic/language values are sent
+  test('POST /api/ask falls back to safe defaults for unrecognized role/topic/language', async () => {
+    const response = await request(app)
+      .post('/api/ask')
+      .send({
+        question: 'Where can I get water?',
+        language: 'Klingon',
+        role: 'Hacker',
+        topic: 'Nonsense'
+      });
+
+    // Should not error out — it should safely default and still respond
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('answer');
+  }, 15000);
 
   // Test 1: Rejects empty questions (input validation)
   test('POST /api/ask returns 400 when question is missing', async () => {
