@@ -19,6 +19,15 @@ app.use(express.static('public'));
 
 // Connect to Google's Gemini AI using the secret key from .env
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// --- Simple in-memory cache ---
+// Avoids calling the AI again for identical recent questions, saving time and API cost.
+// Cache entries expire after 60 seconds since crowd data changes over time.
+const responseCache = new Map();
+const CACHE_TTL_MS = 60 * 1000;
+
+function getCacheKey(question, language, role, topic) {
+  return `${question.trim().toLowerCase()}|${language}|${role}|${topic}`;
+}
 
 // --- Simulated live crowd data ---
 // In a real deployment, this would come from turnstile sensors, CCTV analytics,
@@ -58,6 +67,13 @@ app.post('/api/ask', async (req, res) => {
 
     if (!question || question.trim() === '') {
       return res.status(400).json({ error: 'Please type a question.' });
+    }
+
+    // --- Efficiency: check cache before calling the AI ---
+    const cacheKey = getCacheKey(question, language, role, topic);
+    const cached = responseCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      return res.json({ answer: cached.answer, cached: true });
     }
 
     // Create the AI model instance
@@ -102,10 +118,13 @@ Keep answers short, clear, and practical (max ~4 sentences unless the question n
 
 Their question: ${question}`;
 
-    const result = await model.generateContent(prompt);
+   const result = await model.generateContent(prompt);
     const answer = result.response.text();
 
-    res.json({ answer });
+    // Store this answer in the cache for future identical questions
+    responseCache.set(cacheKey, { answer, timestamp: Date.now() });
+
+    res.json({ answer, cached: false });
   } catch (error) {
     console.error('Error talking to Gemini:', error.message);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
