@@ -5,6 +5,8 @@ const form = document.getElementById('chat-form');
 const input = document.getElementById('question');
 const chatWindow = document.getElementById('chat-window');
 const languageSelect = document.getElementById('language');
+const roleSelect = document.getElementById('role');
+const topicSelect = document.getElementById('topic');
 const sendBtn = document.getElementById('send-btn');
 
 // Adds a new chat bubble to the screen
@@ -23,6 +25,8 @@ form.addEventListener('submit', async (event) => {
   if (!question) return;
 
   const language = languageSelect.value;
+  const role = roleSelect.value;
+  const topic = topicSelect.value;
 
   // Show the fan's own question in the chat
   addMessage(question, 'user');
@@ -35,8 +39,11 @@ form.addEventListener('submit', async (event) => {
     const response = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question: `Respond in ${language}. Question: ${question}`
+     body: JSON.stringify({
+        question,
+        language,
+        role,
+        topic
       })
     });
 

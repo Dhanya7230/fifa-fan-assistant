@@ -23,7 +23,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // This is the main endpoint: the frontend sends a question here, we send back an AI answer
 app.post('/api/ask', async (req, res) => {
   try {
-    const { question } = req.body;
+    const { question, language, role, topic } = req.body;
 
     if (!question || question.trim() === '') {
       return res.status(400).json({ error: 'Please type a question.' });
@@ -31,13 +31,39 @@ app.post('/api/ask', async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 
-    // This "system context" tells the AI to act as a stadium assistant
-    const prompt = `You are a helpful, friendly FIFA World Cup 2026 stadium assistant.
-You help fans with: finding their way around the stadium, accessibility needs,
-transportation options, multilingual help, and general event information.
-Keep answers short, clear, and practical.
+    // --- Logical decision making based on user context ---
+    // Depending on who is asking and what topic they picked, we add
+    // extra instructions to the AI so the answer actually fits their situation.
+    let extraGuidance = '';
 
-Fan's question: ${question}`;
+    if (role === 'Person with a disability or mobility need') {
+      extraGuidance += ' Prioritize step-free routes, elevators, ramps, and accessible seating/entrances in your answer. Be extra specific about distances and physical layout.';
+    }
+    if (role === 'Volunteer') {
+      extraGuidance += ' Answer as if briefing a volunteer who needs to relay this information to fans — be precise and use short, actionable phrasing.';
+    }
+    if (role === 'Venue Staff') {
+      extraGuidance += ' Answer as if briefing operational staff — include any relevant protocol, safety, or coordination details.';
+    }
+
+    if (topic === 'Crowd/Safety') {
+      extraGuidance += ' Treat this as potentially urgent — prioritize clear, calm, immediate safety guidance first.';
+    }
+    if (topic === 'Sustainability') {
+      extraGuidance += ' Highlight eco-friendly options (recycling points, public transport, reusable items) where relevant.';
+    }
+    if (topic === 'Transportation') {
+      extraGuidance += ' Focus on shuttle, metro, rideshare, and parking guidance.';
+    }
+
+    const prompt = `You are a helpful FIFA World Cup 2026 stadium assistant.
+The person asking is a: ${role}.
+Their question topic category is: ${topic}.
+Respond in this language: ${language}.
+${extraGuidance}
+Keep answers short, clear, and practical (max ~4 sentences unless the question needs a list).
+
+Their question: ${question}`;
 
     const result = await model.generateContent(prompt);
     const answer = result.response.text();

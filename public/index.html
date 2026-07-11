@@ -119,7 +119,25 @@
     </header>
 
     <div class="controls">
-      <label for="language" style="font-size:13px; color:#333;">Answer language:</label>
+      <label for="role" style="font-size:13px; color:#333;">I am a:</label>
+      <select id="role">
+        <option value="Fan">Fan / Ticket holder</option>
+        <option value="Volunteer">Volunteer</option>
+        <option value="Venue Staff">Venue Staff</option>
+        <option value="Person with a disability or mobility need">Person with a disability or mobility need</option>
+      </select>
+
+      <label for="topic" style="font-size:13px; color:#333; margin-top:8px; display:block;">Topic:</label>
+      <select id="topic">
+        <option value="General">General question</option>
+        <option value="Navigation">Navigation / Directions</option>
+        <option value="Accessibility">Accessibility</option>
+        <option value="Transportation">Transportation</option>
+        <option value="Crowd/Safety">Crowd & Safety</option>
+        <option value="Sustainability">Sustainability</option>
+      </select>
+
+      <label for="language" style="font-size:13px; color:#333; margin-top:8px; display:block;">Answer language:</label>
       <select id="language">
         <option value="English">English</option>
         <option value="Spanish">Spanish</option>
@@ -129,7 +147,6 @@
         <option value="Hindi">Hindi</option>
       </select>
     </div>
-
     <div id="chat-window" aria-live="polite">
       <div class="msg bot">Welcome! Ask me anything about the stadium — for example: "Where is the nearest accessible entrance?"</div>
     </div>
