@@ -6,12 +6,23 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = 3000;
 
 // Allow our frontend page to talk to this server
+app.use(helmet());
 app.use(cors());
+
+// Rate limiting: max 30 requests per minute per IP address, to prevent abuse
+// and protect against runaway AI API costs.
+const askLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Too many requests. Please wait a moment and try again.' },
+});
 // Allow the server to understand JSON sent from the frontend
 app.use(express.json());
 // Serve our frontend files (HTML/CSS/JS) from a folder called "public"
@@ -61,7 +72,7 @@ function getCrowdSummary() {
 }
 
 // This is the main endpoint: the frontend sends a question here, we send back an AI answer
-app.post('/api/ask', async (req, res) => {
+app.post('/api/ask', askLimiter, async (req, res) => {
   try {
     const { question, language, role, topic } = req.body;
 
