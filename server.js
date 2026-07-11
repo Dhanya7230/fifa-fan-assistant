@@ -54,6 +54,24 @@ if (require.main === module) {
   }, 10000);
 }
 
+// Retries a function up to `retries` times if it fails, waiting briefly between attempts.
+// This helps the app stay reliable during brief AI service hiccups (e.g. temporary 503 errors)
+// instead of immediately failing the user's request.
+async function withRetry(fn, retries = 2, delayMs = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+      const isRetryable = error.message && error.message.includes('503');
+      if (isLastAttempt || !isRetryable) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 function getCrowdSummary() {
   return Object.entries(gates)
     .map(([name, level]) => `${name}: ${level}% capacity`)
@@ -155,8 +173,11 @@ Keep answers short, clear, and practical (max ~4 sentences unless the question n
 
 Their question: ${question}`;
 
-    const result = await model.generateContent(prompt);
-    const answer = result.response.text();
+    // Use retry logic in case the AI service is briefly overloaded (e.g. 503 errors)
+    const answer = await withRetry(async () => {
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    });
 
     // Store this answer in the cache for future identical questions
     responseCache.set(cacheKey, { answer, timestamp: Date.now() });

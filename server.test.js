@@ -1,12 +1,27 @@
 // server.test.js
 // Basic automated tests for our FIFA Fan Assistant backend.
-// These verify the API behaves correctly without needing a real browser or real Gemini calls.
+// These verify the API behaves correctly without needing a real browser or making
+// real (rate-limited, costly) calls to the Gemini API.
+
+// Mock the Gemini SDK so tests are fast, free, and don't depend on external service availability.
+jest.mock('@google/generative-ai', () => {
+  return {
+    GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockResolvedValue({
+          response: { text: () => 'This is a mocked AI response for testing purposes.' },
+        }),
+      }),
+    })),
+  };
+});
 
 const request = require('supertest');
 const app = require('./server');
 
 describe('FIFA Fan Assistant API', () => {
-    // Test: Rejects overly long questions (protects against abuse/oversized payloads)
+
+  // Test: Rejects overly long questions (protects against abuse/oversized payloads)
   test('POST /api/ask returns 400 when question exceeds 500 characters', async () => {
     const longQuestion = 'a'.repeat(501);
     const response = await request(app)
@@ -28,10 +43,9 @@ describe('FIFA Fan Assistant API', () => {
         topic: 'Nonsense'
       });
 
-    // Should not error out — it should safely default and still respond
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('answer');
-  }, 15000);
+  });
 
   // Test 1: Rejects empty questions (input validation)
   test('POST /api/ask returns 400 when question is missing', async () => {
@@ -59,8 +73,7 @@ describe('FIFA Fan Assistant API', () => {
     expect(response.status).toBe(200);
   });
 
-  // Test 4: A valid request reaches the AI and returns an answer
-  // (this one actually calls Gemini, so it takes a bit longer)
+  // Test 4: A valid request returns a well-formed answer (using the mocked AI response)
   test('POST /api/ask returns an answer for a valid question', async () => {
     const response = await request(app)
       .post('/api/ask')
@@ -75,6 +88,6 @@ describe('FIFA Fan Assistant API', () => {
     expect(response.body).toHaveProperty('answer');
     expect(typeof response.body.answer).toBe('string');
     expect(response.body.answer.length).toBeGreaterThan(0);
-  }, 15000); // allow up to 15 seconds since this calls a real AI API
+  });
 
 });
