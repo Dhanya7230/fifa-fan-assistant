@@ -34,6 +34,25 @@ A GenAI-powered stadium assistant that helps fans, volunteers, and venue staff w
 - No user data is stored or logged; each question is stateless and processed per-request.
 - `.env` (containing the API key) is excluded from version control via `.gitignore`.
 
+## Efficiency
+
+- Identical questions (same text, role, topic, and language) are served from an in-memory cache for 60 seconds instead of re-calling the AI, reducing latency and API cost for repeated or accidental duplicate requests.
+- The frontend has no build step or external framework — plain HTML/CSS/JS keeps load times minimal.
+
+## Accessibility
+
+- All form controls (role, topic, language, question input, send button) have proper `<label>` associations and `aria-label` attributes for screen readers.
+- The chat window uses `aria-live="polite"` and `role="log"` so new AI responses are automatically announced to screen reader users.
+- Visible focus outlines are provided for all interactive elements to support keyboard-only navigation.
+- Color contrast between text and backgrounds follows WCAG AA-friendly ratios.
+
+## Testing
+
+- Automated tests (`server.test.js`, run via `npm test`) cover input validation (missing/empty questions), the homepage route, and a full end-to-end AI response.
+- Run tests with:
+```
+  npm test
+```
 ## Future improvements
 
 - Real IoT/turnstile data integration
