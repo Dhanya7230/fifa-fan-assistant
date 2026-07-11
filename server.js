@@ -76,6 +76,18 @@ const ALLOWED_ROLES = ['Fan', 'Volunteer', 'Venue Staff', 'Person with a disabil
 const ALLOWED_TOPICS = ['General', 'Navigation', 'Accessibility', 'Transportation', 'Crowd/Safety', 'Sustainability'];
 const ALLOWED_LANGUAGES = ['English', 'Spanish', 'French', 'Portuguese', 'Arabic', 'Hindi'];
 
+// Operational intelligence endpoint: exposes live gate/crowd status directly,
+// so organizers/staff can see raw data without needing to ask the AI a question.
+app.get('/api/crowd-status', (req, res) => {
+  const gateStatus = Object.entries(gates).map(([name, level]) => ({
+    gate: name,
+    capacityPercent: level,
+    status: level >= 75 ? 'Congested' : level >= 40 ? 'Moderate' : 'Clear',
+  }));
+
+  res.json({ gates: gateStatus, updatedAt: new Date().toISOString() });
+});
+
 // This is the main endpoint: the frontend sends a question here, we send back an AI answer
 app.post('/api/ask', askLimiter, async (req, res) => {
   try {
